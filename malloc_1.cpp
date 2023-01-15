@@ -10,7 +10,7 @@ void* smalloc(size_t size)
 	void* before_malloc_program_break = sbrk(0);
 	void* after_malloc_program_break = sbrk(size);
 	
-	if(after_malloc_program_break != before_malloc_program_break)
+	if(after_malloc_program_break != before_malloc_program_break ||after_malloc_program_break=-1 ||before_malloc_program_break=-1)
 	{
 		return NULL;
 	}
