@@ -105,7 +105,7 @@ void* smalloc(size_t size){
         }
         MallocMetadata* data=(MallocMetadata*)ptr_block_end;
         data->is_free= false;
-         data->prev = NULL;
+        data->prev = NULL;
         data->size = size;
         data->next = NULL;
         insert_metadata_sorted(data);
@@ -117,42 +117,42 @@ void* smalloc(size_t size){
 }
 void* scalloc(size_t num, size_t size)
 {
- void* allocated= smalloc(num*size);
- if(allocated == NULL)
- {
-     return NULL;
- }
- memset(allocated,0,size*num);
- return allocated;
+    void* allocated= smalloc(num*size);
+    if(allocated == NULL)
+    {
+        return NULL;
+    }
+    memset(allocated,0,size*num);
+    return allocated;
 }
 
 
 void* srealloc(void* oldp, size_t size){
-if(size==0 || size > 1e8)
-{
-    return NULL;
-}
-if(oldp==NULL)
-{
-    return smalloc(size);
-}
-MallocMetadata* old_block_meta_data = (MallocMetadata*)((char*)oldp-sizeof(struct MallocMetadata));
-if(size <= old_block_meta_data->size)
-{
-    old_block_meta_data->size = size;
-    return oldp;
-}
-else
-{
-    char* newp  = (char*)smalloc(size);
-    if(newp == NULL)
+    if(size==0 || size > 1e8)
     {
         return NULL;
     }
-    memmove(newp,oldp,old_block_meta_data->size);
-    sfree(oldp);
-    return newp;
-}
+    if(oldp==NULL)
+    {
+        return smalloc(size);
+    }
+    MallocMetadata* old_block_meta_data = (MallocMetadata*)((char*)oldp-sizeof(struct MallocMetadata));
+    if(size <= old_block_meta_data->size)
+    {
+        old_block_meta_data->size = size;
+        return oldp;
+    }
+    else
+    {
+        char* newp  = (char*)smalloc(size);
+        if(newp == NULL)
+        {
+            return NULL;
+        }
+        memmove(newp,oldp,old_block_meta_data->size);
+        sfree(oldp);
+        return newp;
+    }
 
 }
 void sfree(void* p){
@@ -185,7 +185,26 @@ size_t _num_free_blocks(){
     }
     return count;
 }
-size_t _num_free_bytes();
+size_t _num_free_bytes(){
+    int count = 0;
+    MallocMetadata* head = block_list_head;
+    if (head == NULL)
+    {
+        return count;
+    }
+    else
+    {
+        while(head!=NULL)
+        {
+            if(head->is_free == true)
+            {
+                count+= head->size;
+            }
+            head = head->next;
+        }
+    }
+    return count;
+}
 size_t _num_allocated_blocks(){
     int count = 0;
     MallocMetadata* head = block_list_head;
@@ -206,11 +225,25 @@ size_t _num_allocated_blocks(){
 size_t _num_allocated_bytes()
 {
 
-    return 0;
-}
-size_t _num_meta_data_bytes(){
-    return 0;
+    size_t count = 0;
+    MallocMetadata* head = block_list_head;
+    if (head == NULL)
+    {
+        return count;
+    }
+    else
+    {
+        while(head!=NULL)
+        {
+            count+= head->size;
+            head = head->next;
+        }
+    }
+    return count;
 }
 size_t _size_meta_data(){
-    return 0;
+    return sizeof(struct MallocMetadata);
+}
+size_t _num_meta_data_bytes(){
+   return _size_meta_data()*_num_allocated_blocks();
 }
