@@ -2,6 +2,9 @@
 #include <stdbool.h>
 #include <cstring>
 #define KB 1024
+#define META_DATA_BLOCK_SIZE 32
+#define MIN_BLOCK_SIZE_TO_KEEP 128
+
 void sfree(void* p);
 typedef struct MallocMetadata {
     size_t size;
@@ -116,6 +119,19 @@ void* find_free_block(size_t size)
     }
     return to_return;
 }
+
+/*levi helper function 0,0 */
+void remove_from_list(MallocMetadata block)
+{
+
+    prev_block = block->prev;
+    next_block = block->next;
+    if(prev_block==NULL)
+    {
+        block_list_head = next_block
+    }
+}
+
 //need to implement a search for free block
 //need to implement a sorted insertion
 void* smalloc(size_t size){
@@ -149,11 +165,24 @@ void* smalloc(size_t size){
 
         return (void*)((long)data + sizeof(struct MallocMetadata));
     }
+    else
+    {
+        if(found->size>=size+MIN_BLOCK_SIZE_TO_KEEP+META_DATA_BLOCK_SIZE)
+        {
+            remove_from_list(found);
+
+
+        }
+
+
+        found->is_free = false;
+        return (void*)((long)found + sizeof(MallocMetadata));
+    }
     // printf("found! \n");
-    found->is_free = false;
+
     // printf("%x is data adress \n",found);
     //printf("im going to return something return is %ld,sizeof(MallocMetaData) is %ld,return found+sizeof(Mallocmetadata)) and its %ld \n",found,sizeof(MallocMetadata),(long)found+sizeof(MallocMetadata));
-    return (void*)((long)found + sizeof(MallocMetadata));
+
     //look for free block
 }
 void* scalloc(size_t num, size_t size)
@@ -179,7 +208,11 @@ has at least 128 bytes of free memory, excluding the size of your meta-data stru
 Note: Once again, you are not requested to find the “best” free block for this section, but
 the first block that satisfies the allocation defined above*/
 
-void split_into_two_objects(void* start_of_first_object,void* start_of_second_object);
+//
+void split_into_two_objects(void* start_of_first_object,void* start_of_second_object)
+{
+
+}
 
 /*Challenge 2 (Memory utilization):
 Many allocations and de-allocations might cause two adjacent blocks to be free, but
