@@ -215,7 +215,7 @@ for some time (or at least most of it).
 Solution: Change your current implementation, by looking up how you can use mmap()
 and munmap() instead of sbrk() for your memory allocation unit. Use this only for
 allocations that require 128kb space or more (128*1024 B).*/
-//solution: in smalloc, make sure to check if size > 128*1024 bytes.
+//solution: in smalloc, make sure to check if size >= 128*1024 bytes., if yes , use mmap.
 void* srealloc(void* oldp, size_t size){
     if(size==0 || size > 1e8)
     {
