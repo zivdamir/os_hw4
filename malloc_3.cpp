@@ -1,7 +1,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <cstring>
-
+#define KB 1024
 void sfree(void* p);
 typedef struct MallocMetadata {
     size_t size;
@@ -205,6 +205,17 @@ Then enlarge the wilderness chunk enough to store the new request.  */
 void enlarge_wilderness_block();
 //goes to the wilderness block,enlarge it by sbrk-ing to the right size and then merge it using try_merge_freed_block() function.
 bool check_for_wilderness();//returns true if wilderness condition applies, false otherwise.
+/* Challenge 4 (Large allocations):
+Recall from our first discussion that modern dynamic memory managers not only use
+sbrk() but also mmap(). This process helps reduce the negative effects of memory
+fragmentation when large blocks of memory are freed but locked by smaller, more recently
+allocated blocks lying between them and the end of the allocated space. In this case, had the
+block been allocated with sbrk(), it would have probably remained unused by the system
+for some time (or at least most of it).
+Solution: Change your current implementation, by looking up how you can use mmap()
+and munmap() instead of sbrk() for your memory allocation unit. Use this only for
+allocations that require 128kb space or more (128*1024 B).*/
+//solution: in smalloc, make sure to check if size > 128*1024 bytes.
 void* srealloc(void* oldp, size_t size){
     if(size==0 || size > 1e8)
     {
