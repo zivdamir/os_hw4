@@ -39,6 +39,20 @@ void* initialize_node(size_t size)
 
     return ptr_block_end;
 }
+void divide_and_insert(void* address, size_t starting_block_size, size_t second_block_size){
+    MallocData first_block=(MallocData)address;
+    first_block->size=starting_block_size;
+    first_block->is_free=false;
+    first_block->next=NULL;
+    first_block->prev=NULL;
+    insert_metadata_sorted(first_block);
+    MallocData second_block= (MallocData) ((long)(address)+starting_block_size+_size_meta_data());
+    second_block->size=second_block_size;
+    second_block->next=NULL;
+    second_block->prev=NULL;
+    second_block->is_free=true;
+    insert_metadata_sorted(second_block);
+}
 void insert_metadata_sorted(MallocMetadata* node){
 
     MallocData head=block_list_head;
