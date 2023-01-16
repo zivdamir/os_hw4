@@ -72,7 +72,7 @@ void* find_free_block(size_t size)
     MallocMetadata* temp=block_list_head;
     MallocMetadata* to_return=NULL;
 
-    while(temp->next!=NULL&& temp->is_free==true )
+    while(temp!=NULL&& temp->is_free==true )
     {
         if(temp->size >= size)
         {
