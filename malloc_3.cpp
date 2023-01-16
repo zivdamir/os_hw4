@@ -2,9 +2,8 @@
 #include <stdbool.h>
 #include <cstring>
 #define KB 1024
-#define META_DATA_BLOCK_SIZE 32
 #define MIN_BLOCK_SIZE_TO_KEEP 128
-
+size_t _size_meta_data();
 void sfree(void* p);
 typedef struct MallocMetadata {
     size_t size;
@@ -128,7 +127,8 @@ void remove_from_list(MallocMetadata block)
     next_block = block->next;
     if(prev_block==NULL)
     {
-        block_list_head = next_block
+        block_list_head = next_block;
+
     }
 }
 
@@ -167,7 +167,7 @@ void* smalloc(size_t size){
     }
     else
     {
-        if(found->size>=size+MIN_BLOCK_SIZE_TO_KEEP+META_DATA_BLOCK_SIZE)
+        if(found->size>=size+MIN_BLOCK_SIZE_TO_KEEP+_size_meta_data())
         {
             remove_from_list(found);
 
