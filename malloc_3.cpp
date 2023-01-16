@@ -4,7 +4,7 @@
 #define KB 1024
 #define MIN_BLOCK_SIZE_TO_KEEP 128
 size_t _size_meta_data();
-void divide_and_insert(void* address, size_t starting_block_size, size_t second_block_size);
+
 void sfree(void* p);
 typedef struct MallocMetadata {
     size_t size;
@@ -12,7 +12,8 @@ typedef struct MallocMetadata {
     MallocMetadata* next;
     MallocMetadata* prev;
 }*MallocData;
-
+void divide_and_insert(void* address, size_t starting_block_size, size_t second_block_size);
+void insert_metadata_sorted(MallocData node);
 //need to initialize the list
 MallocData block_list_head=NULL;
 //a
@@ -53,7 +54,7 @@ void divide_and_insert(void* address, size_t starting_block_size, size_t second_
     second_block->is_free=true;
     insert_metadata_sorted(second_block);
 }
-void insert_metadata_sorted(MallocMetadata* node){
+void insert_metadata_sorted(MallocData node){
 
     MallocData head=block_list_head;
     //2 options, first its head, second not.
@@ -135,10 +136,10 @@ void* find_free_block(size_t size)
 }
 
 /*levi helper function 0,0 */
-void remove_from_list(MallocMetadata block)
+void remove_from_list(MallocData block)
 {
-    MallocMetadata prev_block = block->prev;
-    MallocMetadata next_block = block->next;
+    MallocData prev_block = block->prev;
+    MallocData next_block = block->next;
     if(prev_block!=NULL)
     {
         prev_block->next=next_block;
@@ -147,7 +148,7 @@ void remove_from_list(MallocMetadata block)
     {
         next_block->prev=prev_block;
     }
-    if(prev_block==NULL)
+    if(prev_block == NULL)
     {
         block_list_head = next_block;
     }
@@ -195,7 +196,7 @@ void* smalloc(size_t size){
         if(found->size>=size+MIN_BLOCK_SIZE_TO_KEEP+_size_meta_data())
         {
             remove_from_list(found);
-            divide_and_insert(found,size,(found->size-_size_meta_data()-size))
+            divide_and_insert(found,size,(found->size-_size_meta_data()-size));
 
         }
         found->is_free = false;
