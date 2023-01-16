@@ -41,13 +41,13 @@ void* initialize_node(size_t size)
     return ptr_block_end;
 }
 void divide_and_insert(void* address, size_t starting_block_size, size_t second_block_size){
-    MallocData first_block=(MallocData)address;
+    MallocData first_block = (MallocData)address;
     first_block->size=starting_block_size;
     first_block->is_free=false;
     first_block->next=NULL;
     first_block->prev=NULL;
     insert_metadata_sorted(first_block);
-    MallocData second_block= (MallocData) ((long)(address)+starting_block_size+_size_meta_data());
+    MallocData second_block = (MallocData) ((long)(address)+starting_block_size+_size_meta_data());
     second_block->size=second_block_size;
     second_block->next=NULL;
     second_block->prev=NULL;
@@ -159,6 +159,24 @@ void remove_from_list(MallocData block)
 
 //need to implement a search for free block
 //need to implement a sorted insertion
+
+/**levi added**/
+// assumes that list in now empty
+MallocData find_last_in_list()
+{
+    MallocData last_in_list = block_list_head;
+    MallocData iterator = block_list_head;
+    while(iterator != NULL)
+    {
+        if(last_in_list<iterator)
+        {
+            last_in_list=iterator;
+        }
+    }
+    return last_in_list;
+}
+/**levi added**/
+
 void* smalloc(size_t size){
     if(size == 0 || size > 1e8)
     {
@@ -168,7 +186,7 @@ void* smalloc(size_t size){
     //printf("%d is data->size, while %d is size \n",data->size,size);
     if(block_list_head == NULL)
     {
-        MallocData head=(MallocData)initialize_node(size);
+        MallocData head = (MallocData)initialize_node(size);
         if(head==NULL)
         {
             return NULL;
@@ -180,11 +198,21 @@ void* smalloc(size_t size){
     MallocData found = (MallocData)find_free_block(size);
     if(found == NULL)
     {
-        MallocData data=(MallocData) initialize_node(size);
+        MallocData last_in_list = find_last_in_list();
+        /**levi changed**/
+        MallocData data = NULL;
+        if(last_in_list->is_free==true)
+        {
+            sbrk(-(last_in_list->size+_size_meta_data()));
+        }
+        /**levi changed**/
+
+        data = (MallocData) initialize_node(size);
         if ( data == NULL)
         {
             return NULL;
         }
+
         data->is_free=false;
         insert_metadata_sorted(data);
 
@@ -300,6 +328,71 @@ void* srealloc(void* oldp, size_t size){
     }
 
 }
+
+/**levi added**/
+void merge_blocks_into_block_one(MallocData block_one,MallocData block_two)
+{
+    MallocData merged_block=NULL;
+    second_block_size = 0;
+    if(block_one<block_two)
+    {
+        merged_block = block_one;
+        second_block_size = block_two->size;
+    }
+    else
+    {
+        merged_block = block_two;
+        second_block_size = block_one->size;
+    }
+
+    merged_block->size = merged_block->size + second_block_size + _size_meta_data();
+    block_one=merged_block;
+    return;
+}
+/**levi added**/
+
+/**levi added**/
+void merge_if_possible(MallocData block)
+{
+    MallocData closest_block_behind=NULL;
+    MallocData iterator = block_list_head;
+    while(iterator!=NULL)
+    {
+        if(iterator < block)
+        {
+            if(closest_block_behind == NULL || closest_block_behind < iterator)
+            {
+                closest_block_behind = iterator;
+            }
+        }
+        iterator = iterator->next;
+    }
+
+    MallocData closest_block_in_front = NULL;
+    mallocData end_of_block = (MallocData)((char*)block)+size+_size_meta_data())
+    if(end_of_block<sbrk(NULL))
+    {
+        closest_block_in_front = end_of_block;
+    }
+
+    if(closest_block_behind!=NULL && closest_block_behind->is_free==true)
+    {
+        remove_from_list(block);
+        remove_from_list(closest_block_behind);
+        merge_blocks_into_block_one(block,closest_block_behind);
+        insert_metadata_sorted(block);
+
+    }
+    if(closest_block_in_front!=NULL && closest_block_in_front->is_free==true)
+    {
+        remove_from_list(block);
+        remove_from_list(closest_block_in_front);
+        merge_blocks_into_block_one(block,closest_block_in_front);
+        insert_metadata_sorted(block);
+    }
+}
+/**levi added**/
+
 void sfree(void* p){
     //assume that its a pointer to the actual data.
     if(p == NULL)
@@ -308,7 +401,7 @@ void sfree(void* p){
     }
     //ptr_to_metadata->is_free = true;
     MallocData ptr_to_metadata = (MallocData)((long)p-sizeof(struct MallocMetadata));
-
+    merge_if_possible(ptr_to_metadata);
     ptr_to_metadata->is_free = true;
     return;
 }
