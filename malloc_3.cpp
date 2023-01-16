@@ -137,14 +137,23 @@ void* find_free_block(size_t size)
 /*levi helper function 0,0 */
 void remove_from_list(MallocMetadata block)
 {
-
-    prev_block = block->prev;
-    next_block = block->next;
+    MallocMetadata prev_block = block->prev;
+    MallocMetadata next_block = block->next;
+    if(prev_block!=NULL)
+    {
+        prev_block->next=next_block;
+    }
+    if(next_block!=NULL)
+    {
+        next_block->prev=prev_block;
+    }
     if(prev_block==NULL)
     {
         block_list_head = next_block;
-
     }
+    block->next=NULL;
+    block->prev=NULL;
+    return;
 }
 
 //need to implement a search for free block
@@ -180,16 +189,15 @@ void* smalloc(size_t size){
 
         return (void*)((long)data + sizeof(struct MallocMetadata));
     }
+    /*changes challenge 1 are here*/
     else
     {
         if(found->size>=size+MIN_BLOCK_SIZE_TO_KEEP+_size_meta_data())
         {
             remove_from_list(found);
-
+            divide_and_insert(found,size,(found->size-_size_meta_data()-size))
 
         }
-
-
         found->is_free = false;
         return (void*)((long)found + sizeof(MallocMetadata));
     }
@@ -223,11 +231,8 @@ has at least 128 bytes of free memory, excluding the size of your meta-data stru
 Note: Once again, you are not requested to find the “best” free block for this section, but
 the first block that satisfies the allocation defined above*/
 
-//
-void split_into_two_objects(void* start_of_first_object,void* start_of_second_object)
-{
 
-}
+
 
 /*Challenge 2 (Memory utilization):
 Many allocations and de-allocations might cause two adjacent blocks to be free, but
