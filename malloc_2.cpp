@@ -1,30 +1,31 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <cstring>
-#include <cstdio>
+
 void sfree(void* p);
-struct MallocMetadata {
+typedef struct MallocMetadata {
     size_t size;
     bool is_free;
     MallocMetadata* next;
     MallocMetadata* prev;
-};
+}*MallocData;
 
 //need to initialize the list
-MallocMetadata* block_list_head=NULL;
+MallocData block_list_head=NULL;
 //a
 
 void* initialize_node(size_t size)
 {
-   // printf("inittttttttt listttttt \n");
-   printf("sbrk-ing \n");
+
+   //printf("sbrk-ing \n");
     void* starting_block=sbrk(0);
     void* ptr_block_end=sbrk(sizeof(struct MallocMetadata)+size);
-    if(ptr_block_end!=starting_block)
+    if(starting_block!=ptr_block_end)
     {
+        //*(long*)ptr_block_end==-1||
         return NULL;
     }
-    MallocMetadata* head_data=(MallocMetadata*)ptr_block_end;
+    MallocData head_data=(MallocData)ptr_block_end;
     head_data->is_free= true;
     head_data->prev=NULL;
     head_data->size=size;
@@ -37,10 +38,10 @@ void* initialize_node(size_t size)
 }
 void insert_metadata_sorted(MallocMetadata* node){
 
-    MallocMetadata* head=block_list_head;
+    MallocData head=block_list_head;
     //2 options, first its head, second not.
     //assume block_list_head isn't null
-    if(node < head)
+    /*if(node < head)
     {
         //this is the new head
         node->next=head;
@@ -48,21 +49,25 @@ void insert_metadata_sorted(MallocMetadata* node){
         head->prev=node;
         block_list_head=node;
         return;
-    }
+    }*/
     //else, not the head , look for it.
-
+    if(head == NULL)
+    {
+        block_list_head=node;
+        return;
+    }
     while(head->next!=NULL)
     {
-        if(node<head->next)
-        {
-            //insert to next and temp's next is our node.
-            MallocMetadata* temp_next =head->next;
-            temp_next->prev=node;
-            head->next=node;
-            node->prev = head;
-            node->next= temp_next;
-            return;
-        }
+//        if(node<head->next)
+//        {
+//            //insert to next and temp's next is our node.
+//            MallocMetadata* temp_next =head->next;
+//            temp_next->prev=node;
+//            head->next=node;
+//            node->prev = head;
+//            node->next= temp_next;
+//            return;
+//        }
         head=head->next;
     }
     //in case node is bigger than all the elements in the list
@@ -73,8 +78,8 @@ void insert_metadata_sorted(MallocMetadata* node){
 }
 void* find_free_block(size_t size)
 {
-    MallocMetadata* temp=block_list_head;
-    MallocMetadata* to_return=NULL;
+    MallocData temp=block_list_head;
+    MallocData to_return=NULL;
 
     while(temp!=NULL )
     {
@@ -97,40 +102,42 @@ void* smalloc(size_t size){
     {
         return NULL;
     }
-    printf("%lu is our size \n",size);
+  //  printf("%x is our size \n",size);
     //printf("%d is data->size, while %d is size \n",data->size,size);
     if(block_list_head == NULL)
     {
-
-        MallocMetadata* head=(MallocMetadata*)initialize_node(size);
+        MallocData head=(MallocData)initialize_node(size);
         if(head==NULL)
         {
             return NULL;
         }
+        insert_metadata_sorted(head);
         block_list_head=head;
 
     }
-    MallocMetadata* found = (MallocMetadata*)find_free_block(size);
+    MallocData found = (MallocData)find_free_block(size);
     if(found == NULL)
     {
-        MallocMetadata* data=(MallocMetadata*) initialize_node(size);
+        MallocData data=(MallocData) initialize_node(size);
         if ( data == NULL)
         {
             return NULL;
         }
         data->is_free=false;
         insert_metadata_sorted(data);
-        printf("%lu is data adres \n",data);
-        return (data + sizeof(struct MallocMetadata));
+
+        return (void*)((long)data + sizeof(struct MallocMetadata));
     }
    // printf("found! \n");
     found->is_free = false;
-    printf("%lu is data adress \n",found);
-    return (found + sizeof(struct MallocMetadata));
+   // printf("%x is data adress \n",found);
+   //printf("im going to return something return is %ld,sizeof(MallocMetaData) is %ld,return found+sizeof(Mallocmetadata)) and its %ld \n",found,sizeof(MallocMetadata),(long)found+sizeof(MallocMetadata));
+    return (void*)((long)found + sizeof(MallocMetadata));
     //look for free block
 }
 void* scalloc(size_t num, size_t size)
 {
+
     void* allocated= smalloc(num*size);
     if(allocated == NULL)
     {
@@ -150,7 +157,7 @@ void* srealloc(void* oldp, size_t size){
     {
         return smalloc(size);
     }
-    size_t block_size = ((MallocMetadata*)((long)oldp - sizeof(MallocMetadata)))->size;
+    size_t block_size = ((MallocData)((long)oldp - sizeof(MallocMetadata)))->size;
 
     //MallocMetadata* old_block_meta_data = (MallocMetadata*)((long)oldp-sizeof(struct MallocMetadata));
     if(size <= block_size)
@@ -178,17 +185,15 @@ void sfree(void* p){
         return;
     }
     //ptr_to_metadata->is_free = true;
-    MallocMetadata* ptr_to_metadata = (MallocMetadata*)(char*)p-sizeof(struct MallocMetadata);
-   // printf("freeing meta_data of size %d\n",ptr_to_metadata->size);
+    MallocData ptr_to_metadata = (MallocData)((long)p-sizeof(struct MallocMetadata));
 
     ptr_to_metadata->is_free = true;
-    //printf("freeing meta_data of size %d\n",ptr_to_metadata->size);
     return;
 }
 
 size_t _num_free_blocks(){
     int count = 0;
-    MallocMetadata* head = block_list_head;
+    MallocData head = block_list_head;
     if (head == NULL)
     {
       //  printf("HEAD IS NULL \n");
@@ -196,7 +201,7 @@ size_t _num_free_blocks(){
     }
     else
     {
-        MallocMetadata* temp = block_list_head;
+        MallocData temp = block_list_head;
 
         while(temp!=NULL)
         {
@@ -212,7 +217,7 @@ size_t _num_free_blocks(){
 }
 size_t _num_free_bytes(){
     int count = 0;
-    MallocMetadata* head = block_list_head;
+    MallocData head = block_list_head;
     if (head == NULL)
     {
         return count;
@@ -232,7 +237,7 @@ size_t _num_free_bytes(){
 }
 size_t _num_allocated_blocks(){
     int count = 0;
-    MallocMetadata* head = block_list_head;
+    MallocData head = block_list_head;
     if (head == NULL)
     {
         return count;
@@ -251,7 +256,7 @@ size_t _num_allocated_bytes()
 {
 
     size_t count = 0;
-    MallocMetadata* head = block_list_head;
+    MallocData head = block_list_head;
     if (head == NULL)
     {
         return count;
@@ -273,11 +278,3 @@ size_t _num_meta_data_bytes(){
     return _size_meta_data()*_num_allocated_blocks();
 }
 
-int main()
-{
-    void* base=sbrk(0);
-    void * a= (char*) smalloc(10);
-    void* base2=sbrk(0);
-    size_t meta_data_size=_size_meta_data();
-    printf("%d is size meta data, %lu is base size, %lu is a, base2 is %lu \n",meta_data_size,base,a,base2);
-}
