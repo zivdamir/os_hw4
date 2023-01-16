@@ -41,7 +41,7 @@ void insert_metadata_sorted(MallocMetadata* node){
     MallocData head=block_list_head;
     //2 options, first its head, second not.
     //assume block_list_head isn't null
-    /*if(node < head)
+    if(node->size < head->size)
     {
         //this is the new head
         node->next=head;
@@ -49,7 +49,7 @@ void insert_metadata_sorted(MallocMetadata* node){
         head->prev=node;
         block_list_head=node;
         return;
-    }*/
+    }
     //else, not the head , look for it.
     if(head == NULL)
     {
@@ -167,8 +167,18 @@ void* scalloc(size_t num, size_t size)
     memset(allocated,0,size*num);
     return allocated;
 }
-
-
+/*Challenge 1 (Memory utilization):
+If we reuse freed memory sectors with bigger sizes than required, we’ll be wasting memory
+(internal fragmentation).
+Solution: Implement a function that smalloc() will use, such that if a pre-allocated block
+is reused and is large enough, the function will cut the block into two smaller blocks with
+two separate meta-data structs. One will serve the current allocation, and another will
+remain unused for later (marked free and added to the list).
+Definition of “large enough”: After splitting, the remaining block (the one that is not used)
+has at least 128 bytes of free memory, excluding the size of your meta-data structure.
+Note: Once again, you are not requested to find the “best” free block for this section, but
+the first block that satisfies the allocation defined above*/
+void split_into_two_objects(void* start_of_first_object,void* start_of_second_object);
 void* srealloc(void* oldp, size_t size){
     if(size==0 || size > 1e8)
     {
