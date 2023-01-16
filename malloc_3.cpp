@@ -178,7 +178,33 @@ Definition of “large enough”: After splitting, the remaining block (the one 
 has at least 128 bytes of free memory, excluding the size of your meta-data structure.
 Note: Once again, you are not requested to find the “best” free block for this section, but
 the first block that satisfies the allocation defined above*/
+
 void split_into_two_objects(void* start_of_first_object,void* start_of_second_object);
+
+/*Challenge 2 (Memory utilization):
+Many allocations and de-allocations might cause two adjacent blocks to be free, but
+separate.
+Solution: Implement a function that sfree() will use, such that if one adjacent block (next
+or previous) was free, the function will automatically combine both free blocks (the current
+one and the adjacent one) into one large free block. On the corner case where both the next
+and previous blocks are free, you should combine all 3 of them into one large block. */
+
+void try_merge_freed_block(void* block);
+//gets a free'd block , trying to merge from left and right.(go to prev and next if its possible, check if they're free,if yes merge, if no dont)
+
+
+/*Challenge 3 (Memory utilization):
+Define the “Wilderness” chunk as the topmost allocated chunk. Let’s presume this chunk is
+free, and all others are full. It is possible that the new allocation requested is bigger than the
+wilderness block, thus requiring us to call sbrk() once more – but now, it is easier to
+simply enlarge the wilderness block, saving us an addition of a meta-data structure.
+Solution: Change your current implementation, such that if:
+1. A new request has arrived, and no free memory chunk was found big enough.
+2. And the wilderness chunk is free.
+Then enlarge the wilderness chunk enough to store the new request.  */
+void enlarge_wilderness_block();
+//goes to the wilderness block,enlarge it by sbrk-ing to the right size and then merge it using try_merge_freed_block() function.
+bool check_for_wilderness();//returns true if wilderness condition applies, false otherwise.
 void* srealloc(void* oldp, size_t size){
     if(size==0 || size > 1e8)
     {
