@@ -4,6 +4,7 @@
 #define KB 1024
 #define MIN_BLOCK_SIZE_TO_KEEP 128
 size_t _size_meta_data();
+void divide_and_insert(void* address, size_t starting_block_size, size_t second_block_size);
 void sfree(void* p);
 typedef struct MallocMetadata {
     size_t size;
