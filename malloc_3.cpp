@@ -369,12 +369,20 @@ void merge_if_possible(MallocData block)
     }
 
     MallocData closest_block_in_front = NULL;
-    mallocData end_of_block = (MallocData)((char*)block)+size+_size_meta_data())
-    if(end_of_block<sbrk(NULL))
+    mallocData end_of_block = (MallocData)((char*)block)+block->size+_size_meta_data());// added ';', changed size to block->size
+    if(end_of_block<sbrk(0))//changed from sbrk(NULL) to sbrk(0) for code coherency.
     {
         closest_block_in_front = end_of_block;
     }
-
+    //levi's code
+    //a little problem levi, if we merge closest from behind with block first, we "lose" block, because we actually clear its data in the merging. 
+    //so removing block in the second if(the if statement after this one) , wont do anything, if anythign it'll cause some serious problems cause block wont really change..
+    //2 solutions:solution 1: first we merge with closest_in_front,then we merge with closest in behind , OR
+    //solution 2:we insert another if statement , before these two , and we check the case where both cases are correct, and we do a third function that will merge 3 of them
+    //and we insert returns at the end of each of these blocks.
+    //I like solution 2 more, seems more elegant. 
+    // i'll work on it later. 
+    //add another if here.
     if(closest_block_behind!=NULL && closest_block_behind->is_free==true)
     {
         remove_from_list(block);
@@ -401,8 +409,10 @@ void sfree(void* p){
     }
     //ptr_to_metadata->is_free = true;
     MallocData ptr_to_metadata = (MallocData)((long)p-sizeof(struct MallocMetadata));
+    ptr_to_metadata->is_free = true;//changed the location to be above merge_if_possible,I think its better that way, maybe it wasn't
+    //your intention, let me know. anyway we merge it with a free block behind it and one block after it so we can always set it
+    //there to is_free=true;
     merge_if_possible(ptr_to_metadata);
-    ptr_to_metadata->is_free = true;
     return;
 }
 
