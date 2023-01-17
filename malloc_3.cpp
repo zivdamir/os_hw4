@@ -4,7 +4,67 @@
 #define KB 1024
 #define MIN_BLOCK_SIZE_TO_KEEP 128
 size_t _size_meta_data();
-
+/*Challegne 5:
+Consider the following case – a buffer overflow happens in the heap memory area (either on
+accident or on purpose), and this overflow overwrites the metadata bytes of some allocation
+with arbitrary junk (or worse). Think – which problems can happen if we access this
+overwritten metadata?
+Solution: We can detect (but not prevent) heap overflows using “cookies” – 32bit integers
+that are placed in the metadata of each allocation. If an overflow happens, the cookie value
+will change and we can detect this before accessing the allocation’s metadata by comparing
+the cookie value with the expected cookie value.
+You are required to add cookies to the allocations’ metadata.
+Note that cookie values should be randomized – otherwise they could be maliciously
+overwritten with that same constant value to avoid overwrite detection. You can choose a
+global random value for all the cookies used in the same process.
+Change your current implementation, such that before every metadata access, you should
+check if the relevant metadata cookie has changed. In case of overwrite detection, you
+should immediately call exit(0xdeadbeef), as the process memory is corrupted and it cannot
+continue (not recommended in practice).
+Things to consider –
+1. When should you choose the random value?
+2. Where should the cookie be placed in the metadata? (most buffer overflows
+happen from lower addresses to higher addresses)
+Note: You are not requested to “narrow” down the heap anywhere in this section. The only
+exception for allowing free memory to go back to the system is in challenge 4, when using
+munmap().
+Note: As opposed to the previous section, the ‘size’ field in the metadata for blocks here changes.
+Notes about srealloc():
+srealloc() requires some complicated edge-case treatment now. Use the following guidelines:
+1. If srealloc() is called on a block and you find that this block and one of or both
+neighboring blocks are large enough to contain the request, merge and use them. Prioritize
+as follows:
+a. Try to reuse the current block without any merging.
+b. Try to merge with the adjacent block with the lower address.
+• If the block is the wilderness chunk, enlarge it after merging if needed.
+c. If the block is the wilderness chunk, enlarge it.
+d. Try to merge with the adjacent block with the higher address.
+e. Try to merge all those three adjacent blocks together.
+f. If the wilderness chunk is the adjacent block with the higher address: 
+i. Try to merge with the lower and upper blocks (such as in e), and enlarge the
+wilderness block as needed.
+ii. Try to merge only with higher address (the wilderness chunk), and enlarge it as
+needed.
+g. Try to find a different block that’s large enough to contain the request (don’t forget
+that you need to free the current block, therefore you should, if possible, merge it
+with neighboring blocks before proceeding).
+h. Allocate a new block with sbrk().
+2. After the process described in the previous section, if one of the options ‘a’ to ‘d’ worked,
+and the unused section of the block is large enough, split the block (according to the
+instructions in challenge 1)!
+3. You can assume that we will not test cases where we will reallocate an mmap() allocated
+block to be resized to a block (excluding the meta-data) that’s less than 128kb.
+4. You can assume that we will not test cases where we will reallocate a normally allocated
+block to be resized to a block (excluding the meta-data) that’s more than 128kb.
+5. When srealloc() is called on an mmaped block, you are never to re-use previous blocks,
+meaning that a new block must be allocated (unless old_size==new_size).
+Notes about mmap():
+1. It is recommended to have another list for mmap() allocated blocks, separate from the list
+of other allocations.
+2. To find whether the block was allocated with mmap() or regularly, you can either add a new
+field to the meta-data, or simply check if the ‘size’ field is greater than 128kb or not.
+3. Remember to add support for your debug functions (function 5-10). Note that functions 5-6
+should not consider munmapp()’ed areas as free.*/
 void sfree(void* p);
 typedef struct MallocMetadata {
     size_t size;
@@ -327,7 +387,7 @@ void* srealloc(void* oldp, size_t size){
 MallocData merge_blocks_into_block_one(MallocData block_one,MallocData block_two)/*ziv added*/
 {
     MallocData merged_block=NULL;
-    second_block_size = 0;
+    size_t second_block_size = 0;
     if(block_one<block_two)
     {
         merged_block = block_one;
@@ -340,7 +400,7 @@ MallocData merge_blocks_into_block_one(MallocData block_one,MallocData block_two
     }
 
     merged_block->size = merged_block->size + second_block_size + _size_meta_data();
-    block_one=merged_block; maybe need to revert
+    block_one=merged_block; //maybe need to revert
     return merged_block; /*ziv added*/
 }
 /**levi added**/
@@ -363,20 +423,12 @@ void merge_if_possible(MallocData block)
     }
 
     MallocData closest_block_in_front = NULL;
-    mallocData end_of_block = (MallocData)((char*)block)+block->size+_size_meta_data());// added ';', changed size to block->size
+    MallocData end_of_block = (MallocData) ((long) block  + block->size + _size_meta_data());// added ';', changed size to block->size
     if(end_of_block<sbrk(0))//changed from sbrk(NULL) to sbrk(0) for code coherency.
     {
         closest_block_in_front = end_of_block;
     }
-    //levi's code
-    //a little problem levi, if we merge closest from behind with block first, we "lose" block, because we actually clear its data in the merging. 
-    //so removing block in the second if(the if statement after this one) , wont do anything, if anythign it'll cause some serious problems cause block wont really change..
-    //2 solutions:solution 1: first we merge with closest_in_front,then we merge with closest in behind , OR
-    //solution 2:we insert another if statement , before these two , and we check the case where both cases are correct, and we do a third function that will merge 3 of them
-    //and we insert returns at the end of each of these blocks.
-    //I like solution 2 more, seems more elegant. 
-    // i'll work on it later. 
-    //add another if here.
+   
     /*zivs addition*/
     if(closest_block_behind!=NULL && closest_block_behind->is_free==true &&closest_block_in_front!=NULL && closest_block_in_front->is_free==true)
     {
