@@ -230,12 +230,7 @@ void* smalloc(size_t size){
         found->is_free = false;
         return (void*)((long)found + sizeof(MallocMetadata));
     }
-    // printf("found! \n");
-
-    // printf("%x is data adress \n",found);
-    //printf("im going to return something return is %ld,sizeof(MallocMetaData) is %ld,return found+sizeof(Mallocmetadata)) and its %ld \n",found,sizeof(MallocMetadata),(long)found+sizeof(MallocMetadata));
-
-    //look for free block
+    
 }
 void* scalloc(size_t num, size_t size)
 {
@@ -259,7 +254,7 @@ Definition of “large enough”: After splitting, the remaining block (the one 
 has at least 128 bytes of free memory, excluding the size of your meta-data structure.
 Note: Once again, you are not requested to find the “best” free block for this section, but
 the first block that satisfies the allocation defined above*/
-
+/*done */
 
 
 
@@ -270,9 +265,8 @@ Solution: Implement a function that sfree() will use, such that if one adjacent 
 or previous) was free, the function will automatically combine both free blocks (the current
 one and the adjacent one) into one large free block. On the corner case where both the next
 and previous blocks are free, you should combine all 3 of them into one large block. */
+/*done*/
 
-void try_merge_freed_block(void* block);
-//gets a free'd block , trying to merge from left and right.(go to prev and next if its possible, check if they're free,if yes merge, if no dont)
 
 
 /*Challenge 3 (Memory utilization):
@@ -330,7 +324,7 @@ void* srealloc(void* oldp, size_t size){
 }
 
 /**levi added**/
-void merge_blocks_into_block_one(MallocData block_one,MallocData block_two)
+MallocData merge_blocks_into_block_one(MallocData block_one,MallocData block_two)/*ziv added*/
 {
     MallocData merged_block=NULL;
     second_block_size = 0;
@@ -346,8 +340,8 @@ void merge_blocks_into_block_one(MallocData block_one,MallocData block_two)
     }
 
     merged_block->size = merged_block->size + second_block_size + _size_meta_data();
-    block_one=merged_block;
-    return;
+    block_one=merged_block; maybe need to revert
+    return merged_block; /*ziv added*/
 }
 /**levi added**/
 
@@ -383,20 +377,38 @@ void merge_if_possible(MallocData block)
     //I like solution 2 more, seems more elegant. 
     // i'll work on it later. 
     //add another if here.
+    /*zivs addition*/
+    if(closest_block_behind!=NULL && closest_block_behind->is_free==true &&closest_block_in_front!=NULL && closest_block_in_front->is_free==true)
+    {
+        remove_from_list(block);
+        remove_from_list(closest_block_behind);
+        remove_from_list(closest_block_in_front);
+        MallocData merged_prev_and_curr = merge_blocks_into_block_one(closest_block_behind, block);
+        MallocData merged_with_next = merge_blocks_into_block_one(merged_prev_and_curr, closest_block_in_front);
+        insert_metadata_sorted(merged_with_next);
+        return;
+    }
+    /*zivs addition*/
+    else/*zivs addition*/
+    {
     if(closest_block_behind!=NULL && closest_block_behind->is_free==true)
     {
         remove_from_list(block);
         remove_from_list(closest_block_behind);
-        merge_blocks_into_block_one(block,closest_block_behind);
-        insert_metadata_sorted(block);
-
+        MallocData merged=merge_blocks_into_block_one(block,closest_block_behind);
+        insert_metadata_sorted(merged);
+        return;/*zivs addition*/
     }
     if(closest_block_in_front!=NULL && closest_block_in_front->is_free==true)
     {
         remove_from_list(block);
         remove_from_list(closest_block_in_front);
-        merge_blocks_into_block_one(block,closest_block_in_front);
-        insert_metadata_sorted(block);
+        MallocData merged=merge_blocks_into_block_one(block,closest_block_in_front);
+        insert_metadata_sorted(merged);
+        return;/*zivs addition*/
+    }
+    //in case where nothing happens,(we haven't found anything to merge..)
+    return;/*zivs addition*/
     }
 }
 /**levi added**/
