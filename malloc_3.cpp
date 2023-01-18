@@ -458,10 +458,7 @@ void* srealloc(void* oldp, size_t size){
 
             check_for_valid_cookie_value(merged_block);
             //maybe we don't need to merge it
-            divide_and_insert(merged_block, size, (block->size - _size_meta_data() - size));
-            check_for_valid_cookie_value(merged_block);
-
-            return (void *) ((long) merged_block + sizeof(struct MallocMetadata));
+            //check_for_valid_cookie_value(merged_block);
         }
 
         /**e. Try to merge all those three adjacent blocks together.**/
