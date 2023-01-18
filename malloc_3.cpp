@@ -18,6 +18,7 @@ typedef struct MallocMetadata {
     MallocMetadata *next;
     MallocMetadata* prev;
 }*MallocData;
+void print_list(MallocData head);
 MallocData merge_blocks_into_block_one(MallocData block_one,MallocData block_two);
 void check_for_valid_cookie_value(MallocData block){
     if (block == NULL)
@@ -235,15 +236,21 @@ and munmap() instead of sbrk() for your memory allocation unit. Use this only fo
 allocations that require 128kb space or more (128*1024 B).*/
 //solution: in smalloc, make sure to check if size >= 128*1024 bytes., if yes , use mmap.
 void* smalloc(size_t size){
+    
     if(size == 0 || size > 1e8)
     {
         return NULL;
     }
-    if (size >= KB*MIN_BLOCK_SIZE_TO_KEEP)
+    //zivzivziv
+    
+    //printf("in malloc now \n");
+    //print_list(block_list_head_sbrk);
+    if (size >= KB * MIN_BLOCK_SIZE_TO_KEEP)
     {
         //use mmap
-        void* allocated_mmap= mmap(NULL , size+_size_meta_data() , PROT_READ | PROT_WRITE , MAP_ANONYMOUS |MAP_PRIVATE,
-                  -1 , 0);
+        printf("wtf \n");
+        void *allocated_mmap = mmap(NULL, size + _size_meta_data(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE,
+                                    -1, 0);
         if(allocated_mmap==MAP_FAILED)
         {
             return NULL;
@@ -270,7 +277,7 @@ void* smalloc(size_t size){
         return (void*)((long)allocated_mmap+_size_meta_data());
         //todo , add here support for
     }
-    printf("line 273 %ld \n",size);
+   // printf("line 273 %ld \n",size);
     if (block_list_head_sbrk == NULL)
     {
         MallocData head = (MallocData)initialize_node(size);
@@ -287,14 +294,15 @@ void* smalloc(size_t size){
     check_for_valid_cookie_value(found);
     if (found == NULL)
     {
-        printf("line 291 %ld \n",size);
+        //printf("line 291 %ld \n",size);
         MallocData last_in_list = find_last_in_list();
         check_for_valid_cookie_value(last_in_list);
         /**levi changed**/
         MallocData data = NULL;
         if(last_in_list->is_free==true)
         {
-            sbrk(-(last_in_list->size+_size_meta_data()));
+            remove_from_list(last_in_list);
+            sbrk(-(last_in_list->size + _size_meta_data()));
         }
         /**levi changed**/
 
@@ -306,9 +314,9 @@ void* smalloc(size_t size){
         }
 //hello
         data->is_free=false;
-        printf("before insert %ld\n",size);
+       // printf("before insert %ld\n",size);
         insert_metadata_sorted(data);
-        printf("after insert %ld\n",size);
+       // printf("after insert %ld\n",size);
         return (void *)((long)data + sizeof(struct MallocMetadata));
     }
     /*changes challenge 1 are here*/
@@ -359,20 +367,30 @@ block to be resized to a block (excluding the meta-data) that’s more than 128k
 meaning that a new block must be allocated (unless old_size==new_size).
 .*/
 void* srealloc(void* oldp, size_t size){
+ //   printf(" 366 sbrk is %d\n", (long)sbrk(0)%100000);
     if(size==0 || size > 1e8)
     {
         return NULL;
     }
     if(oldp==NULL)
     {
+       // printf("how dafuq oldp is null now \n");
         return smalloc(size);
     }
 
     MallocData block = (MallocData)((long)oldp-_size_meta_data());
+    
     check_for_valid_cookie_value(block);
+    //printf("levi im going to punch you if you dont shut up,np \n");
     if(block->is_mmap==false) {
+       // printf(" 381 sbrk is %d\n", (long)sbrk(0)%100000);
+        
         MallocData closest_block_behind = find_closest_block_behind(block);
-        MallocData closest_block_in_front = find_closest_block_behind(block);
+       // printf("384 sbrk is %d\n", (long)sbrk(0)%100000);
+        
+       //print_list(block_list_head_sbrk);
+        MallocData closest_block_in_front = find_closest_block_in_front(block);
+      //  printf("levi im going to punch you if you dont shut up,np \n");
         
         size_t block_size =  block->size;
         //can be NULLS  CHECK IT OUT BEFORE
@@ -397,22 +415,25 @@ void* srealloc(void* oldp, size_t size){
        // bool the_block_in_front_is_big_enough = (size <= block_size + block_in_front_size_with_meta);
 
         bool three_blocks_are_enough = (size <= block_behind_size_with_meta + block_in_front_size_with_meta + block_size);
-
+      //  printf("levi im going to punch you if you dont shut up,np \n");
         bool block_in_front_is_wilderness = (closest_block_in_front == find_last_in_list());
         /**conditions**/
-
+       // printf("block validation at 403 \n");
+      // printf("levi im going to punch you if you dont shut up,np \n");
         check_for_valid_cookie_value(block);
         //MallocMetadata* old_block_meta_data = (MallocMetadata*)((long)oldp-sizeof(struct MallocMetadata));
 
         /**a. Try to reuse the current block without any merging.**/
         if (size <= block_size) {
-            
-            //levi, we dont always divide and insert.. only when we have enough size
-            check_for_valid_cookie_value(block);
-            if(block_size>=MIN_BLOCK_SIZE_TO_KEEP+_size_meta_data()+size)
-            {
+
+      //  printf("levi im going to punch you if you dont shut up,np \n");
+        // levi, we dont always divide and insert.. only when we have enough size
+        check_for_valid_cookie_value(block);
+        if (block_size >= MIN_BLOCK_SIZE_TO_KEEP + _size_meta_data() + size)
+        {
             remove_from_list(block);
             divide_and_insert(block, size, (block->size - _size_meta_data() - size));
+            
             }
             //else, dont do anything, we dont need to!
             return oldp;
@@ -424,11 +445,13 @@ void* srealloc(void* oldp, size_t size){
 
             /**• If the block is the wilderness chunk, enlarge it after merging if needed.**/
             if (!the_block_behind_is_big_enough && block_is_wilderness) {
-                size_t delta_to_sbrk = size - block_behind_size_with_meta - block_size;
-                sbrk(delta_to_sbrk);//check if null
-                block->size = block->size + delta_to_sbrk;
-                check_for_valid_cookie_value(block);
-                was_expanded = true;
+           
+            size_t delta_to_sbrk = size - block_behind_size_with_meta - block_size;
+            sbrk(delta_to_sbrk); // check if null
+            block->size = block->size + delta_to_sbrk;
+             check_for_valid_cookie_value(block);
+             ;
+             was_expanded = true;
             }
             if (was_expanded || the_block_behind_is_big_enough) {
                 remove_from_list(block);
@@ -672,65 +695,105 @@ MallocData find_closest_block_behind(MallocData block)
 {
     MallocData closest_block_behind=NULL;
     MallocData iterator = block_list_head_sbrk;
-    check_for_valid_cookie_value(iterator);
-    if(block==iterator) // IN CASE where the head is actually him
+   // printf("line 675 \n");
+   // check_for_valid_cookie_value(iterator);
+    //printf("line 677 \n");
+    /*if(block==iterator) // IN CASE where the head is actually him
     {
         return NULL;
-    }
+    }*/
     while(iterator!=NULL)
     {
-        printf("678 \n");
+        check_for_valid_cookie_value(iterator);
+        //printf("678 \n");
         if(iterator < block)
         {
-            printf("680 \n");
+            //iterator+_size_meta_data+iterator->size==block.
+            //printf("680 \n");
             if(closest_block_behind == NULL || closest_block_behind < iterator)
             {
                 closest_block_behind = iterator;
             }
-            printf("684 \n");
+        //    printf("684 \n");
         }
-        printf("686 \n");
+     //   printf("686 \n");
         iterator = iterator->next;
-        printf("688 \n");
-        check_for_valid_cookie_value(iterator);
-        printf("%x\n", iterator);
-        printf("%x\n", block);
+        // printf("688 \n");
+      //  printf("%x\n", iterator);
+        
+
+        //printf("%x\n", block);
         //printf("%x\n", iterator->next);
         // zivziv here
     }
     //big problem ere
+    if(closest_block_behind!=NULL)
+    {
     check_for_valid_cookie_value(closest_block_behind);
+    }
+   // printf("returning \n");
     return closest_block_behind;
 }
 MallocData find_closest_block_in_front(MallocData block)
 {
-    MallocData closest_block_in_front = NULL;
-    MallocData end_of_block = (MallocData) ((long) block  + block->size + _size_meta_data());// added ';', changed size to block->size
-    if(end_of_block<sbrk(0))//changed from sbrk(NULL) to sbrk(0) for code coherency.
+    MallocData closest_block_in_front=NULL;
+    MallocData iterator = block_list_head_sbrk;
+    
+    
+ 
+    while(iterator!=NULL)
     {
-        closest_block_in_front = end_of_block;
-        check_for_valid_cookie_value(closest_block_in_front);
+        check_for_valid_cookie_value(iterator);
+        if(iterator > block)
+        {
+            
+            if(closest_block_in_front == NULL || closest_block_in_front > iterator)
+            {
+                closest_block_in_front = iterator;
+            }
+          
+        }
+        iterator = iterator->next;
     }
+    //big problem ere
+    if(closest_block_in_front!=NULL)
+    {
     check_for_valid_cookie_value(closest_block_in_front);
+    }
+   // printf("returning \n");
     return closest_block_in_front;
 }
+
 
 /**levi added**/
 void merge_if_possible(MallocData block)
 {
-    printf("707 \n");
+    //printf("707 \n");
     MallocData closest_block_behind=NULL;
-    printf("710 \n");
+   // printf("710 \n");
     closest_block_behind = find_closest_block_behind(block);
-    printf("711\n");
-    check_for_valid_cookie_value(closest_block_behind);
+   // printf("711\n");
+    if(closest_block_behind!=NULL)
+    {
+        printf("not null ,checking for cookies 737 \n");
+        check_for_valid_cookie_value(closest_block_behind);
+        printf("not null ,checking for cookies 739 \n");
+    }
     MallocData closest_block_in_front = NULL;
+   //  printf("find_closest_block_in_front \n");
     closest_block_in_front = find_closest_block_in_front(block);
+   // printf("found \n");
+    if (closest_block_in_front != NULL)
+    {
+        //
+        printf("not null ,checking for cookies 745 \n");
     check_for_valid_cookie_value(closest_block_in_front);
+     printf("not null ,checking for cookies 747 \n");
+    }
     /*zivs addition*/
     if(closest_block_behind!=NULL && closest_block_behind->is_free==true &&closest_block_in_front!=NULL && closest_block_in_front->is_free==true)
     {
-         printf("front and closest_block_behind line 716  \n");
+         //printf("front and closest_block_behind line 716  \n");
         remove_from_list(block);
         remove_from_list(closest_block_behind);
         remove_from_list(closest_block_in_front);
@@ -746,7 +809,7 @@ void merge_if_possible(MallocData block)
     {
     if(closest_block_behind!=NULL && closest_block_behind->is_free==true)
     {
-        printf(" closest_block_behind line 732  \n");
+        //printf(" closest_block_behind line 732  \n");
         remove_from_list(block);
         remove_from_list(closest_block_behind);
         MallocData merged=merge_blocks_into_block_one(block,closest_block_behind);
@@ -756,7 +819,7 @@ void merge_if_possible(MallocData block)
     }
     if(closest_block_in_front!=NULL && closest_block_in_front->is_free==true)
     {
-        printf("front_block_behind line 742  \n");
+       // printf("front_block_behind line 742  \n");
         remove_from_list(block);
         remove_from_list(closest_block_in_front);
         MallocData merged=merge_blocks_into_block_one(block,closest_block_in_front);
@@ -772,24 +835,25 @@ void merge_if_possible(MallocData block)
 
 void sfree(void* p){
     //assume that its a pointer to the actual data.
-    printf("line 755  \n");
+    //printf("line 755  \n");
     if(p == NULL)
     {
         return;
     }
     
-    //ptr_to_metadata->is_free = true;
+  // printf("line 761 \n");
     MallocData ptr_to_metadata = (MallocData)((long)p-sizeof(struct MallocMetadata));
-    printf("line 763  \n");
+   // printf("line 763  \n");
     check_for_valid_cookie_value(ptr_to_metadata);
-    printf("line 765  \n");
+  // printf("line 765  \n");
     if (ptr_to_metadata->is_mmap == false)
     {
-        printf("line 768  \n");
+   // printf("line 768  \n");
     ptr_to_metadata->is_free = true;//changed the location to be above merge_if_possible,I think its better that way, maybe it wasn't
     //your intention, let me know. anyway we merge it with a free block behind it and one block after it so we can always set it
     //there to is_free=true;
-    merge_if_possible(ptr_to_metadata);
+    merge_if_possible(ptr_to_metadata); //return it!
+  //printf("line 793\n");
     }
     if(ptr_to_metadata->is_mmap==true)
     {
@@ -806,7 +870,7 @@ size_t _num_free_blocks(){
     if (head == NULL)
     {
         //  printf("HEAD IS NULL \n");
-       printf("head_Sbrk null \n");
+     //  printf("head_Sbrk null \n");
     }
     else
     {
@@ -831,7 +895,7 @@ size_t _num_free_bytes(){
     check_for_valid_cookie_value(head);
     if (head == NULL)
     {
-        printf("head_Sbrk null \n");
+      //  printf("head_Sbrk null \n");
     }
     else
     {
@@ -853,7 +917,7 @@ size_t _num_allocated_blocks(){
     check_for_valid_cookie_value(head);
     if (head == NULL)
     {
-        printf("its null\n");
+       // printf("its null\n");
     }
     else
     {
@@ -868,14 +932,14 @@ size_t _num_allocated_blocks(){
     check_for_valid_cookie_value(head);
     if (head == NULL)
     {
-        printf("block_head_mmap_is null \n");
+       // printf("block_head_mmap_is null \n");
         return count;
     }
     else
     {
         while(head!=NULL)
         {
-            printf("block_head_mmap_isnt null \n");
+           //printf("block_head_mmap_isnt null \n");
             count+= 1;
             head = head->next;
             check_for_valid_cookie_value(head);
@@ -891,7 +955,7 @@ size_t _num_allocated_bytes()
     check_for_valid_cookie_value(head);
     if (head == NULL)
     {
-        printf("head_Sbrk null \n");
+       // printf("head_Sbrk null \n");
     }
     else
     {
@@ -925,15 +989,42 @@ size_t _size_meta_data(){
 size_t _num_meta_data_bytes(){
     return _size_meta_data()*_num_allocated_blocks();
 }
-int main()
+
+void print_list(MallocData head)
 {
-    char *pad = (char *)smalloc(16);
-    char *wilderness = (char *)smalloc(16);
-    sfree(wilderness);
-    char *bigger1 = (char *)smalloc(32);
-    sfree(bigger1);
-    /*char *bigger2 = (char *)smalloc(104);
-    sfree(bigger2);
-    sfree(pad);*/
-    return 0;
+    MallocData temp = head;
+    printf("printing list...\n");
+    if (temp == NULL)
+    {
+        printf("this whole list is empty \n");
+        return;
+    }
+    while(temp!=NULL)
+    {
+       printf("Address %d ,prev: %lu , next: %lu , rand_cookie: %d , is_free : %d ,size : %ld \n",((long)temp)%100000, temp->prev, temp->next, temp->cookies_rand, temp->is_free, temp->size);
+                temp = temp->next;
+    }
+    return;
+}
+template <typename T>
+void populate_array(T *array, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+    {
+        array[i] = (T)i;
+    }
+}
+int main(){
+    
+    char *a = (char *)smalloc(32 + MIN_BLOCK_SIZE_TO_KEEP + _size_meta_data());
+    print_list(block_list_head_sbrk);
+    populate_array(a, 32 + MIN_BLOCK_SIZE_TO_KEEP + _size_meta_data());
+    print_list(block_list_head_sbrk);
+    char *b = (char *)srealloc(a, 32);
+    //print_list(block_list_head_sbrk);
+   // populate_array(a, 32 + MIN_BLOCK_SIZE_TO_KEEP + _size_meta_data());
+    print_list(block_list_head_sbrk);
+    sfree(b);
+    print_list(block_list_head_sbrk);
+    printf("%d something\n", _num_allocated_blocks());
 }
