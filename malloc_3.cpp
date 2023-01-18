@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <cassert>
 #define KB 1024
 #define MIN_BLOCK_SIZE_TO_KEEP 128
 size_t _size_meta_data();
@@ -18,6 +19,8 @@ typedef struct MallocMetadata {
     MallocMetadata *next;
     MallocMetadata* prev;
 }*MallocData;
+void remove_from_list(MallocData data);
+bool merge_if_possible(MallocData data);
 void print_list(MallocData head);
 MallocData merge_blocks_into_block_one(MallocData block_one,MallocData block_two);
 void check_for_valid_cookie_value(MallocData block){
@@ -75,14 +78,26 @@ void divide_and_insert(void* address_of_mallocdata, size_t starting_block_size, 
     first_block->next=NULL;
     first_block->prev=NULL;
     first_block->cookies_rand = random_value_for_cookie;
-    insert_metadata_sorted(first_block);
+    first_block->is_mmap = false;
     MallocData second_block = (MallocData) ((long)(address_of_mallocdata)+starting_block_size+_size_meta_data());
     second_block->size=second_block_size;
     second_block->cookies_rand = random_value_for_cookie;
     second_block->next = NULL;
     second_block->prev=NULL;
     second_block->is_free=true;
-    insert_metadata_sorted(second_block);
+    second_block->is_mmap = false;
+
+
+    if(!merge_if_possible(second_block))
+    {
+        insert_metadata_sorted(second_block);
+    }
+
+    insert_metadata_sorted(first_block);
+    
+
+
+
 }
 void insert_metadata_sorted(MallocData node){
 
@@ -175,6 +190,7 @@ void remove_from_list(MallocData block)
     check_for_valid_cookie_value(prev_block);
     MallocData next_block = block->next;
     check_for_valid_cookie_value(next_block);
+    
     if(prev_block!=NULL)
     {
         prev_block->next=next_block;
@@ -248,7 +264,7 @@ void* smalloc(size_t size){
     if (size >= KB * MIN_BLOCK_SIZE_TO_KEEP)
     {
         //use mmap
-        printf("wtf \n");
+       // printf("wtf \n");
         void *allocated_mmap = mmap(NULL, size + _size_meta_data(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE,
                                     -1, 0);
         if(allocated_mmap==MAP_FAILED)
@@ -413,9 +429,9 @@ void* srealloc(void* oldp, size_t size){
 
         bool can_use_block_in_front = (closest_block_in_front != NULL && closest_block_in_front->is_free == true);
        // bool the_block_in_front_is_big_enough = (size <= block_size + block_in_front_size_with_meta);
-
+        bool the_block_in_front_is_big_enough = (size <= block_size + block_in_front_size_with_meta);
         bool three_blocks_are_enough = (size <= block_behind_size_with_meta + block_in_front_size_with_meta + block_size);
-      //  printf("levi im going to punch you if you dont shut up,np \n");
+        //  printf("levi im going to punch you if you dont shut up,np \n");
         bool block_in_front_is_wilderness = (closest_block_in_front == find_last_in_list());
         /**conditions**/
        // printf("block validation at 403 \n");
@@ -425,8 +441,8 @@ void* srealloc(void* oldp, size_t size){
 
         /**a. Try to reuse the current block without any merging.**/
         if (size <= block_size) {
-
-      //  printf("levi im going to punch you if you dont shut up,np \n");
+       // printf("case a \n");
+        //  printf("levi im going to punch you if you dont shut up,np \n");
         // levi, we dont always divide and insert.. only when we have enough size
         check_for_valid_cookie_value(block);
         if (block_size >= MIN_BLOCK_SIZE_TO_KEEP + _size_meta_data() + size)
@@ -440,46 +456,48 @@ void* srealloc(void* oldp, size_t size){
         }
         /**b. Try to merge with the adjacent block with the lower address.
         • If the block is the wilderness chunk, enlarge it after merging if needed.**/
-        if (can_use_block_behind) {
-            bool was_expanded = false;
+        if (can_use_block_behind &&(the_block_behind_is_big_enough||(!the_block_behind_is_big_enough && block_is_wilderness))) {
+            remove_from_list(block);
+            remove_from_list(closest_block_behind);
+            check_for_valid_cookie_value(block);
+            check_for_valid_cookie_value(closest_block_behind);
+            
+         //   printf("closest behind size: %d, prev: %d, next: %d\n",closest_block_behind->size,closest_block_behind->prev,closest_block_behind->next);
+            
+            MallocData merged_block = merge_blocks_into_block_one(closest_block_behind, block);
+            
+            //printf(" merged_block size: %d, prev: %d, next: %d\n",merged_block->size,merged_block->prev,merged_block->next);
 
-            /**• If the block is the wilderness chunk, enlarge it after merging if needed.**/
-            if (!the_block_behind_is_big_enough && block_is_wilderness) {
-           
-            size_t delta_to_sbrk = size - block_behind_size_with_meta - block_size;
-            sbrk(delta_to_sbrk); // check if null
-            block->size = block->size + delta_to_sbrk;
-             check_for_valid_cookie_value(block);
-             ;
-             was_expanded = true;
-            }
-            if (was_expanded || the_block_behind_is_big_enough) {
-                remove_from_list(block);
-                remove_from_list(closest_block_behind);
-                check_for_valid_cookie_value(block);
-                check_for_valid_cookie_value(closest_block_behind);
-
-                MallocData merged_block = merge_blocks_into_block_one(closest_block_behind, block);
-                check_for_valid_cookie_value(merged_block);
-                merged_block->is_free = false;
-                void *newp = (void *)((long)merged_block + _size_meta_data());
-                // change here, we dont always divide and insert, we have a conditon for that
-                memmove(newp, oldp, block_size);//block_size is oldp.
-                if(merged_block->size >=size+MIN_BLOCK_SIZE_TO_KEEP+_size_meta_data())
-                {
-                    //calculate newp
-                //we go _size_meta_data from THE START OF THE BLOCK LEVI.
-                
+            check_for_valid_cookie_value(merged_block);
+            merged_block->is_free = false;
+            merged_block->is_mmap = false;
+            void *newp = (void *)((long)merged_block + _size_meta_data());
+            // change here, we dont always divide and insert, we have a conditon for that
+            memmove(newp, oldp, block_size);//block_size is oldp.
+            if(merged_block->size >= size+MIN_BLOCK_SIZE_TO_KEEP+_size_meta_data())
+            {
+               // printf("size_1: %d, size_2: %d\n", size, (merged_block->size - _size_meta_data() - size));
                 divide_and_insert(merged_block, size, (merged_block->size - _size_meta_data() - size));
-                }
-                else {
-                    //not enough size to actualyl divide it..
-                insert_metadata_sorted(merged_block);
-                }
-                //this is incorrect , not 
-                return (void *) ((long) merged_block + _size_meta_data());//not very hard levi.
+                return newp;
             }
-        }
+            else {
+            if (!the_block_behind_is_big_enough && block_is_wilderness) {
+            size_t delta_to_sbrk = size - merged_block->size;
+            sbrk(delta_to_sbrk); // check if null
+            merged_block->size = merged_block->size + delta_to_sbrk;
+            check_for_valid_cookie_value(merged_block);
+            }
+            insert_metadata_sorted(merged_block);
+            return newp;
+            }
+/**• If the block is the wilderness chunk, enlarge it after merging if needed.**/
+            // if (!the_block_behind_is_big_enough && block_is_wilderness) {
+            // size_t delta_to_sbrk = size - merged_block->size;
+            // sbrk(delta_to_sbrk); // check if null
+            // merged_block->size = merged_block->size + delta_to_sbrk;
+            // check_for_valid_cookie_value(merged_block);
+            // }
+            }
         /**c. If the block is the wilderness chunk, enlarge it.**/
         if (block_is_wilderness) {
             //fixes-maybe we dont need to enlarge it .. check it.. todo
@@ -505,7 +523,8 @@ void* srealloc(void* oldp, size_t size){
         }
 
         /**d. Try to merge with the adjacent block with the higher address.**/
-        if (can_use_block_in_front) {
+        if (can_use_block_in_front&&the_block_in_front_is_big_enough) {
+          //  printf("case d \n");
             remove_from_list(closest_block_in_front);
             remove_from_list(block);
 
@@ -532,24 +551,36 @@ void* srealloc(void* oldp, size_t size){
         /**e. Try to merge all those three adjacent blocks together.**/
         if (can_use_block_behind && can_use_block_in_front) {
             if (three_blocks_are_enough) {
-                remove_from_list(closest_block_in_front);
-                remove_from_list(closest_block_behind);
-                remove_from_list(block);
+            
+           // printf("case e \n");
+            
+            remove_from_list(closest_block_in_front);
+            remove_from_list(closest_block_behind);
+            remove_from_list(block);
 
-                check_for_valid_cookie_value(block);
-                check_for_valid_cookie_value(closest_block_in_front);
-                check_for_valid_cookie_value(closest_block_behind);
+            check_for_valid_cookie_value(block);
+            check_for_valid_cookie_value(closest_block_in_front);
+            check_for_valid_cookie_value(closest_block_behind);
 
-                MallocData merged_block = merge_blocks_into_block_one(block, closest_block_in_front);
-                check_for_valid_cookie_value(merged_block);
-
-                merged_block = merge_blocks_into_block_one(merged_block, closest_block_behind);
-                check_for_valid_cookie_value(merged_block);
-
+            MallocData merged_block = merge_blocks_into_block_one(block, closest_block_in_front);
+            check_for_valid_cookie_value(merged_block);
+            //MallocData merged_block2 = merge_blocks_into_block_one(merged_block, closest_block_behind);
+            merged_block = merge_blocks_into_block_one(merged_block, closest_block_behind);
+            check_for_valid_cookie_value(merged_block);
+            
+            if(merged_block->size >= size+MIN_BLOCK_SIZE_TO_KEEP+_size_meta_data())
+            {
+                divide_and_insert(merged_block, size, (merged_block->size - _size_meta_data() - size));
+               
+            }
+            else{
                 insert_metadata_sorted(merged_block);
-                check_for_valid_cookie_value(merged_block);
-                merged_block->is_free = false;
-                return (void *)((long)merged_block + _size_meta_data());
+            }
+            merged_block->is_free = false;
+            merged_block->is_mmap = false;
+            void *newp = (void *)((long)merged_block + _size_meta_data());
+            memmove(newp, oldp, size);
+            return (void *)((long)merged_block + _size_meta_data());
             }
         }
         /**f. If the wilderness chunk is the adjacent block with the higher address: **/
@@ -580,7 +611,9 @@ void* srealloc(void* oldp, size_t size){
                 insert_metadata_sorted(merged_block);
                 check_for_valid_cookie_value(merged_block);
                 merged_block->is_free = false;
-                return (void *)((long)merged_block + sizeof(struct MallocMetadata));
+                void* newp=(void *)((long)merged_block + sizeof(struct MallocMetadata));
+                memmove(newp, oldp, size);
+                return newp;
             }
                 /**ii. Try to merge only with higher address (the wilderness chunk), and enlarge it as
                         needed.**/
@@ -602,15 +635,17 @@ void* srealloc(void* oldp, size_t size){
                 insert_metadata_sorted(merged_block);
                 check_for_valid_cookie_value(merged_block);
                 merged_block->is_free = false;
-                return (void *)((long)merged_block + _size_meta_data());
+                void *newp = (void *)((long)merged_block + _size_meta_data());
+                memmove(newp, oldp, size);
+                return newp;
             }
         }
             /**g. Try to find a different block that’s large enough to contain the request (don’t forget
             that you need to free the current block, therefore you should, if possible, merge it
             with neighboring blocks before proceeding).**/
+        //smalloc(size);
 
-
-            /**h. Allocate a new block with sbrk().**/
+        /**h. Allocate a new block with sbrk().**/
 
         else {
             void *newp = smalloc(size);
@@ -766,7 +801,7 @@ MallocData find_closest_block_in_front(MallocData block)
 
 
 /**levi added**/
-void merge_if_possible(MallocData block)
+bool merge_if_possible(MallocData block)
 {
     //printf("707 \n");
     MallocData closest_block_behind=NULL;
@@ -775,9 +810,9 @@ void merge_if_possible(MallocData block)
    // printf("711\n");
     if(closest_block_behind!=NULL)
     {
-        printf("not null ,checking for cookies 737 \n");
+       // printf("not null ,checking for cookies 737 \n");
         check_for_valid_cookie_value(closest_block_behind);
-        printf("not null ,checking for cookies 739 \n");
+      //  printf("not null ,checking for cookies 739 \n");
     }
     MallocData closest_block_in_front = NULL;
    //  printf("find_closest_block_in_front \n");
@@ -786,14 +821,15 @@ void merge_if_possible(MallocData block)
     if (closest_block_in_front != NULL)
     {
         //
-        printf("not null ,checking for cookies 745 \n");
+      //  printf("not null ,checking for cookies 745 \n");
     check_for_valid_cookie_value(closest_block_in_front);
-     printf("not null ,checking for cookies 747 \n");
+  //   printf("not null ,checking for cookies 747 \n");
     }
     /*zivs addition*/
     if(closest_block_behind!=NULL && closest_block_behind->is_free==true &&closest_block_in_front!=NULL && closest_block_in_front->is_free==true)
     {
          //printf("front and closest_block_behind line 716  \n");
+       //  printf("  in_fron and behind case \n");
         remove_from_list(block);
         remove_from_list(closest_block_behind);
         remove_from_list(closest_block_in_front);
@@ -802,33 +838,38 @@ void merge_if_possible(MallocData block)
         MallocData merged_with_next = merge_blocks_into_block_one(merged_prev_and_curr, closest_block_in_front);
         check_for_valid_cookie_value(merged_with_next);
         insert_metadata_sorted(merged_with_next);
-        return;
+        return true;
     }
     /*zivs addition*/
     else/*zivs addition*/
     {
     if(closest_block_behind!=NULL && closest_block_behind->is_free==true)
     {
+     //   printf(" only in behind case \n");
         //printf(" closest_block_behind line 732  \n");
         remove_from_list(block);
         remove_from_list(closest_block_behind);
         MallocData merged=merge_blocks_into_block_one(block,closest_block_behind);
         check_for_valid_cookie_value(merged);
         insert_metadata_sorted(merged);
-        return;/*zivs addition*/
+        return true;/*zivs addition*/
     }
     if(closest_block_in_front!=NULL && closest_block_in_front->is_free==true)
     {
        // printf("front_block_behind line 742  \n");
+      //  printf(" only in front case \n");
         remove_from_list(block);
         remove_from_list(closest_block_in_front);
         MallocData merged=merge_blocks_into_block_one(block,closest_block_in_front);
         check_for_valid_cookie_value(merged);
+       
         insert_metadata_sorted(merged);
-        return;/*zivs addition*/
+       
+        return true; /*zivs addition*/
     }
     //in case where nothing happens,(we haven't found anything to merge..)
-    return;/*zivs addition*/
+  //  printf("nothing of the above(behind&&front) happend(merge_if possible)\n");
+    return false; /*zivs addition*/
     }
 }
 /**levi added**/
@@ -988,43 +1029,4 @@ size_t _size_meta_data(){
 }
 size_t _num_meta_data_bytes(){
     return _size_meta_data()*_num_allocated_blocks();
-}
-
-void print_list(MallocData head)
-{
-    MallocData temp = head;
-    printf("printing list...\n");
-    if (temp == NULL)
-    {
-        printf("this whole list is empty \n");
-        return;
-    }
-    while(temp!=NULL)
-    {
-       printf("Address %d ,prev: %lu , next: %lu , rand_cookie: %d , is_free : %d ,size : %ld \n",((long)temp)%100000, temp->prev, temp->next, temp->cookies_rand, temp->is_free, temp->size);
-                temp = temp->next;
-    }
-    return;
-}
-template <typename T>
-void populate_array(T *array, size_t len)
-{
-    for (size_t i = 0; i < len; i++)
-    {
-        array[i] = (T)i;
-    }
-}
-int main(){
-    
-    char *a = (char *)smalloc(32 + MIN_BLOCK_SIZE_TO_KEEP + _size_meta_data());
-    print_list(block_list_head_sbrk);
-    populate_array(a, 32 + MIN_BLOCK_SIZE_TO_KEEP + _size_meta_data());
-    print_list(block_list_head_sbrk);
-    char *b = (char *)srealloc(a, 32);
-    //print_list(block_list_head_sbrk);
-   // populate_array(a, 32 + MIN_BLOCK_SIZE_TO_KEEP + _size_meta_data());
-    print_list(block_list_head_sbrk);
-    sfree(b);
-    print_list(block_list_head_sbrk);
-    printf("%d something\n", _num_allocated_blocks());
 }
